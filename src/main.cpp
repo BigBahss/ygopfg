@@ -4,6 +4,7 @@
 
 #include <cardinfo.h>
 #include <parsedcardinfo.h>
+#include <QtMath>
 
 
 static QStringList getArguments(int argc, char *argv[]);
@@ -27,10 +28,10 @@ int main(int argc, char *argv[]) {
     int rc = sqlite3_open(file.toStdString().c_str(), &db);
 
     if (rc) {
-        std::cerr << "Can't open card database: " << sqlite3_errmsg(db) << '\n';
+        std::cerr << "Card database could not be opened: " << sqlite3_errmsg(db) << '\n';
         return rc;
     } else {
-        std::cout << "Opened card database successfully\n\n";
+        std::cout << "Card database opened successfully\n";
     }
 
     QMap<int, ygo::CardInfo> cards;
@@ -42,7 +43,7 @@ int main(int argc, char *argv[]) {
         std::cerr << "SQL error: " << errMsg << '\n';
         sqlite3_free(errMsg);
     } else {
-        std::cout << "Operation completed successfully\n";
+        std::cout << "Read id and type from datas table successfully\n";
     }
 
     errMsg = nullptr;
@@ -52,16 +53,51 @@ int main(int argc, char *argv[]) {
         std::cerr << "SQL error: " << errMsg << '\n';
         sqlite3_free(errMsg);
     } else {
-        std::cout << "Operation completed successfully\n";
+        std::cout << "Read id, name, and desc from texts table successfully\n";
     }
 
     sqlite3_close(db);
+    std::cout << "Closed card database\n";
 
     QMap<int, ygo::ParsedCardInfo> parsedCards;
 
-    for (const auto &card : cards) {
+    for (const auto &card : cards)
         parsedCards.insert(card.id(), ygo::ParsedCardInfo(card));
+
+    int cardTotal = parsedCards.count();
+
+    // Calculate the means
+    double wordTotal = 0;
+    double charTotal = 0;
+    for (const auto &parsedCard : parsedCards) {
+        wordTotal += parsedCard.wordCount();
+        charTotal += parsedCard.charCount();
     }
+    double wordMean = wordTotal / cardTotal;
+    double charMean = charTotal / cardTotal;
+
+    // Calculate the standard deviations
+    double wordSqrDistTotal = 0;
+    double charSqrDistTotal = 0;
+    for (const auto &parsedCard : parsedCards) {
+        wordSqrDistTotal += qPow(parsedCard.wordCount() - wordMean, 2);
+        charSqrDistTotal += qPow(parsedCard.charCount() - charMean, 2);
+    }
+    double wordStdDev = qSqrt(wordSqrDistTotal / cardTotal);
+    double charStdDev = qSqrt(charSqrDistTotal / cardTotal);
+
+    // Calculate 25th percentiles
+    double word25th = wordMean + (-0.675) * wordStdDev;
+    double char25th = charMean + (-0.675) * charStdDev;
+
+    std::cout << '\n';
+    std::cout << "                     Total cards: " << cardTotal << '\n';
+    std::cout << "                 Mean word count: " << wordMean << '\n';
+    std::cout << "                 Mean char count: " << charMean << '\n';
+    std::cout << "Standard deviation of word count: " << wordStdDev << '\n';
+    std::cout << "Standard deviation of char count: " << charStdDev << '\n';
+    std::cout << "      25th percentile word count: " << word25th << '\n';
+    std::cout << "      25th percentile char count: " << char25th << '\n';
 }
 
 inline QStringList getArguments(int argc, char *argv[]) {
@@ -103,10 +139,7 @@ inline int selectFromDatasTable(QMap<int, ygo::CardInfo> *cards, int argc, char 
                 return 1;
             }
         }
-
-        std::cout << colName.toStdString() << " = " << value.toStdString() << '\n';
     }
-    std::cout << '\n';
 
     if (cards->contains(card.id())) {
         (*cards)[card.id()].setCardType(card.cardType());
@@ -136,10 +169,7 @@ inline int selectFromTextsTable(QMap<int, ygo::CardInfo> *cards, int argc, char 
         } else if (colName == "desc") {
             card.setDescription(value);
         }
-
-        std::cout << colName.toStdString() << " = " << value.toStdString() << '\n';
     }
-    std::cout << '\n';
 
     if (cards->contains(card.id())) {
         (*cards)[card.id()].setName(card.name());
