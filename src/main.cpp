@@ -8,7 +8,8 @@
 
 
 static QStringList getArguments(int argc, char *argv[]);
-static QString getDatabaseFile(const QStringList &args);
+static QString getDatabaseFileFromArguments(const QStringList &args);
+static QMap<int, ygo::CardInfo> readCardInfoFromDatabase(const QString &file);
 
 static int selectFromDatasTable(QMap<int, ygo::CardInfo> *data, int argc, char **argv, char **azColName);
 static int selectFromTextsTable(QMap<int, ygo::CardInfo> *data, int argc, char **argv, char **azColName);
@@ -18,46 +19,15 @@ typedef int (*execCallback)(void*, int, char**, char**);
 
 int main(int argc, char *argv[]) {
     QStringList args = getArguments(argc, argv);
-    QString file = getDatabaseFile(args);
+    QString file = getDatabaseFileFromArguments(args);
     if (file.isEmpty()) {
         return 1;
     }
 
-    sqlite3 *db;
-
-    int rc = sqlite3_open(file.toStdString().c_str(), &db);
-
-    if (rc) {
-        std::cerr << "Card database could not be opened: " << sqlite3_errmsg(db) << '\n';
-        return rc;
-    } else {
-        std::cout << "Card database opened successfully\n";
+    QMap<int, ygo::CardInfo> cards = readCardInfoFromDatabase(file);
+    if (cards.isEmpty()) {
+        return 1;
     }
-
-    QMap<int, ygo::CardInfo> cards;
-
-    char *errMsg = nullptr;
-    sqlite3_exec(db, "select id,type from datas", (execCallback)selectFromDatasTable, &cards, &errMsg);
-
-    if (rc != SQLITE_OK) {
-        std::cerr << "SQL error: " << errMsg << '\n';
-        sqlite3_free(errMsg);
-    } else {
-        std::cout << "Read id and type from datas table successfully\n";
-    }
-
-    errMsg = nullptr;
-    sqlite3_exec(db, "select id,name,desc from texts", (execCallback)selectFromTextsTable, &cards, &errMsg);
-
-    if (rc != SQLITE_OK) {
-        std::cerr << "SQL error: " << errMsg << '\n';
-        sqlite3_free(errMsg);
-    } else {
-        std::cout << "Read id, name, and desc from texts table successfully\n";
-    }
-
-    sqlite3_close(db);
-    std::cout << "Closed card database\n";
 
     QMap<int, ygo::ParsedCardInfo> parsedCards;
 
@@ -108,13 +78,53 @@ inline QStringList getArguments(int argc, char *argv[]) {
     return args;
 }
 
-inline QString getDatabaseFile(const QStringList &args) {
+inline QString getDatabaseFileFromArguments(const QStringList &args) {
     if (args.count() > 1) {
         return args.last();
     } else {
         std::cout << "Please specify a card database file\n";
         return QString();
     }
+}
+
+inline QMap<int, ygo::CardInfo> readCardInfoFromDatabase(const QString &file) {
+    sqlite3 *db;
+
+    int rc = sqlite3_open(file.toStdString().c_str(), &db);
+
+    if (rc) {
+        std::cerr << "Card database could not be opened: " << sqlite3_errmsg(db) << '\n';
+        return {};
+    } else {
+        std::cout << "Card database opened successfully\n";
+    }
+
+    QMap<int, ygo::CardInfo> cards;
+
+    char *errMsg = nullptr;
+    sqlite3_exec(db, "select id,type from datas", (execCallback)selectFromDatasTable, &cards, &errMsg);
+
+    if (rc != SQLITE_OK) {
+        std::cerr << "SQL error: " << errMsg << '\n';
+        sqlite3_free(errMsg);
+    } else {
+        std::cout << "Read id and type from datas table successfully\n";
+    }
+
+    errMsg = nullptr;
+    sqlite3_exec(db, "select id,name,desc from texts", (execCallback)selectFromTextsTable, &cards, &errMsg);
+
+    if (rc != SQLITE_OK) {
+        std::cerr << "SQL error: " << errMsg << '\n';
+        sqlite3_free(errMsg);
+    } else {
+        std::cout << "Read id, name, and desc from texts table successfully\n";
+    }
+
+    sqlite3_close(db);
+    std::cout << "Closed card database\n";
+
+    return cards;
 }
 
 inline int selectFromDatasTable(QMap<int, ygo::CardInfo> *cards, int argc, char **argv, char **azColName) {
