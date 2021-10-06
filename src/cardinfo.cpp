@@ -27,21 +27,15 @@ namespace ygo {
     }
 
     bool CardInfo::hasEffect() const {
-        if (cardType() & ygo::Effect) {
+        if (cardType() & ygo::Effect || cardType() & ygo::Spell || cardType() & ygo::Trap) {
             return true;
-        } else if (cardType() & ygo::Spell) {
-            if (cardType() & ygo::Pendulum) {
-                if (description().contains("[ Pendulum Effect ]")) {
-                    return true;
-                } else {
-                    return false;
-                }
-            } else {
+        } else if (cardType() & ygo::Pendulum) {
+            // Only normal pendulums will reach here, so we only check if the card has a pendulum effect
+            if (description().contains("[ Pendulum Effect ]")) {
                 return true;
+            } else {
+                return false;
             }
-            return true;
-        } else if (cardType() & ygo::Trap) {
-            return true;
         } else {
             return false;
         }
