@@ -22,6 +22,14 @@ namespace ygo {
             m_simplifiedEffect.remove(re_materials);
         }
 
+        // Remove ritual spell card text.
+        if (m_cardType & ygo::Ritual && m_cardType & ygo::Monster) {
+            static const QRegularExpression re_ritualSpell1(R"(You can Ritual Summon this card with (a(ny)? )?"[^"]+"( Ritual Spell( Card)?| card)?\.)");
+            m_simplifiedEffect.remove(re_ritualSpell1);
+            static const QRegularExpression re_ritualSpell2(R"(This (card|monster) can only be Ritual Summoned with the Ritual Spell Card, "[^"]+"\.)");
+            m_simplifiedEffect.remove(re_ritualSpell2);
+        }
+
         // Newlines aren't considered for the character count, so we remove them.
         static const QRegularExpression re_newLines(R"([\r\n])");
         m_simplifiedEffect.remove(re_newLines);
