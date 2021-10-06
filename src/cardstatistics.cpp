@@ -52,6 +52,10 @@ namespace ygo {
         static const QRegularExpression re_stillBeActivated(R"( \(but (its|their) effects can still be activated\))");
         m_simplifiedEffect.remove(re_stillBeActivated);
 
+        // Remove "(when this card resolves)".
+        static const QRegularExpression re_whenCardResolves(R"( \(when this card resolves\))");
+        m_simplifiedEffect.remove(re_whenCardResolves);
+
         // Newlines aren't considered for the character count, so we remove them.
         static const QRegularExpression re_newLines(R"([\r\n])");
         m_simplifiedEffect.remove(re_newLines);
