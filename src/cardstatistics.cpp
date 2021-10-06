@@ -12,6 +12,10 @@ namespace ygo {
           m_wordCount(0),
           m_charCount(0)
     {
+        // Remove inclusion/exclusion text.
+        static const QRegularExpression re_inclusionExclusion(R"(\(This card('s name)? is (always|not) treated as (an? )?"[^"]+"( card)?\.\))");
+        m_simplifiedEffect.remove(re_inclusionExclusion);
+
         // Newlines aren't considered for the character count, so we remove them.
         static const QRegularExpression re_newLines(R"([\r\n])");
         m_simplifiedEffect.remove(re_newLines);
