@@ -36,6 +36,10 @@ namespace ygo {
             m_simplifiedEffect.remove(re_geminiCondition);
         }
 
+        // Remove statlines of tokens and trap monsters.
+        static const QRegularExpression re_statline(R"( \([^\)]+\/[^\)]+\/Level \d{1,2}\/ATK \d+\/DEF \d+\))");
+        m_simplifiedEffect.remove(re_statline);
+
         // Newlines aren't considered for the character count, so we remove them.
         static const QRegularExpression re_newLines(R"([\r\n])");
         m_simplifiedEffect.remove(re_newLines);
