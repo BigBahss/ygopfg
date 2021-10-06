@@ -56,6 +56,10 @@ namespace ygo {
         static const QRegularExpression re_whenCardResolves(R"( \(when this card resolves\))");
         m_simplifiedEffect.remove(re_whenCardResolves);
 
+        // Remove "(but [you] can [Normal] Set)".
+        static const QRegularExpression re_butCanSet(R"( \(but( you)? can( Normal)? Set\))");
+        m_simplifiedEffect.remove(re_butCanSet);
+
         // Newlines aren't considered for the character count, so we remove them.
         static const QRegularExpression re_newLines(R"([\r\n])");
         m_simplifiedEffect.remove(re_newLines);
