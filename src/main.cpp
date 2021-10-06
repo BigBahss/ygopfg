@@ -1,10 +1,10 @@
 #include <iostream>
 #include <sqlite3.h>
 #include <QMap>
-
-#include <cardinfo.h>
-#include <parsedcardinfo.h>
 #include <QtMath>
+
+#include "cardinfo.h"
+#include "cardstatistics.h"
 
 
 static QStringList getArguments(int argc, char *argv[]);
@@ -24,44 +24,60 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    QMap<int, ygo::CardInfo> cards = readCardInfoFromDatabase(file);
-    if (cards.isEmpty()) {
+    QMap<int, ygo::CardInfo> cardsById = readCardInfoFromDatabase(file);
+    if (cardsById.isEmpty()) {
         return 1;
     }
 
-    QMap<int, ygo::ParsedCardInfo> parsedCards;
+    QMultiMap<QString, int> idsByName;
+    for (const auto &card : cardsById) {
+        idsByName.insert(card.name(), card.id());
+    }
 
-    for (const auto &card : cards)
-        parsedCards.insert(card.id(), ygo::ParsedCardInfo(card));
+    QMap<QString, ygo::CardInfo> effectCardsByName;
+    QMap<QString, ygo::CardInfo> nonEffectCardsByName;
 
-    int cardTotal = parsedCards.count();
+    for (const auto &card : cardsById) {
+        if (card.hasEffect()) {
+            effectCardsByName.insert(card.name(), ygo::CardInfo(card));
+        } else {
+            nonEffectCardsByName.insert(card.name(), ygo::CardInfo(card));
+        }
+    }
+
+    QMap<QString, ygo::CardStatistics> effectCardStats;
+    for (const auto &card : effectCardsByName) {
+        effectCardStats.insert(card.name(), ygo::CardStatistics(card));
+    }
+
+    int effectCardTotal = effectCardsByName.count();
 
     // Calculate the means
     double wordTotal = 0;
     double charTotal = 0;
-    for (const auto &parsedCard : parsedCards) {
-        wordTotal += parsedCard.wordCount();
-        charTotal += parsedCard.charCount();
+    for (const auto &effectCard : effectCardStats) {
+        wordTotal += effectCard.wordCount();
+        charTotal += effectCard.charCount();
     }
-    double wordMean = wordTotal / cardTotal;
-    double charMean = charTotal / cardTotal;
+    double wordMean = wordTotal / effectCardTotal;
+    double charMean = charTotal / effectCardTotal;
 
     // Calculate the standard deviations
     double wordSqrDistTotal = 0;
     double charSqrDistTotal = 0;
-    for (const auto &parsedCard : parsedCards) {
-        wordSqrDistTotal += qPow(parsedCard.wordCount() - wordMean, 2);
-        charSqrDistTotal += qPow(parsedCard.charCount() - charMean, 2);
+    for (const auto &effectCard : effectCardStats) {
+        wordSqrDistTotal += qPow(effectCard.wordCount() - wordMean, 2);
+        charSqrDistTotal += qPow(effectCard.charCount() - charMean, 2);
     }
-    double wordStdDev = qSqrt(wordSqrDistTotal / cardTotal);
-    double charStdDev = qSqrt(charSqrDistTotal / cardTotal);
+    double wordStdDev = qSqrt(wordSqrDistTotal / effectCardTotal);
+    double charStdDev = qSqrt(charSqrDistTotal / effectCardTotal);
 
     // Calculate 25th percentiles
     double word25th = wordMean + (-0.675) * wordStdDev;
     double char25th = charMean + (-0.675) * charStdDev;
 
     std::cout << '\n';
-    std::cout << "                     Total cards: " << cardTotal << '\n';
+    std::cout << "              Total effect cards: " << effectCardTotal << '\n';
     std::cout << "                 Mean word count: " << wordMean << '\n';
     std::cout << "                 Mean char count: " << charMean << '\n';
     std::cout << "Standard deviation of word count: " << wordStdDev << '\n';
