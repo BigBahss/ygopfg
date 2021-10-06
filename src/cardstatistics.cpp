@@ -44,6 +44,10 @@ namespace ygo {
         static const QRegularExpression re_cardType(R"( \(Monster, Spell,( (and/)?or)? Trap\))");
         m_simplifiedEffect.remove(re_cardType);
 
+        // Remove type of monster card "(Ritual, Fusion, Synchro, Xyz, Pendulum, and Link)".
+        static const QRegularExpression re_monsterCardType(R"( \((Ritual|Fusion|Synchro|Xyz|Pendulum|Link)(,?( and| or)? (Ritual|Fusion|Synchro|Xyz|Pendulum|Link))+\))");
+        m_simplifiedEffect.remove(re_monsterCardType);
+
         // Newlines aren't considered for the character count, so we remove them.
         static const QRegularExpression re_newLines(R"([\r\n])");
         m_simplifiedEffect.remove(re_newLines);
