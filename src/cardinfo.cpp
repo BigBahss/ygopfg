@@ -4,7 +4,7 @@
 namespace ygo {
 
     CardInfo::CardInfo()
-        : m_cardType(Null),
+        : m_cardType(NullType),
           m_id(0)
     {
 
@@ -24,6 +24,27 @@ namespace ygo {
 
     void CardInfo::setId(int id) {
         m_id = id;
+    }
+
+    bool CardInfo::hasEffect() const {
+        if (cardType() & ygo::Effect) {
+            return true;
+        } else if (cardType() & ygo::Spell) {
+            if (cardType() & ygo::Pendulum) {
+                if (description().contains("[ Pendulum Effect ]")) {
+                    return true;
+                } else {
+                    return false;
+                }
+            } else {
+                return true;
+            }
+            return true;
+        } else if (cardType() & ygo::Trap) {
+            return true;
+        } else {
+            return false;
+        }
     }
 
 }

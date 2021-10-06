@@ -8,7 +8,7 @@
 namespace ygo {
 
     enum CardTypeFlags {
-        Null        = 0x00000000,
+        NullType    = 0x00000000,
         Monster     = 0x00000001,
         Spell       = 0x00000002,
         Trap        = 0x00000004,
@@ -66,6 +66,8 @@ namespace ygo {
 
         QString description() const { return m_description; }
         void setDescription(const QString &description);
+
+        bool hasEffect() const;
 
     private:
         QString m_name;
