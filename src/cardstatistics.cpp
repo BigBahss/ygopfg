@@ -30,6 +30,12 @@ namespace ygo {
             m_simplifiedEffect.remove(re_ritualSpell2);
         }
 
+        // Remove gemini summoning condition text.
+        if (m_cardType & ygo::Gemini && m_cardType & ygo::Monster) {
+            static const QRegularExpression re_geminiCondition(R"(^[^●]+)");
+            m_simplifiedEffect.remove(re_geminiCondition);
+        }
+
         // Newlines aren't considered for the character count, so we remove them.
         static const QRegularExpression re_newLines(R"([\r\n])");
         m_simplifiedEffect.remove(re_newLines);
