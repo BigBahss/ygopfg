@@ -60,6 +60,22 @@ namespace ygo {
         static const QRegularExpression re_butCanSet(R"( \(but( you)? can( Normal)? Set\))");
         m_simplifiedEffect.remove(re_butCanSet);
 
+        if (m_cardType & ygo::Pendulum) {
+            if (m_cardType & ygo::Normal) {
+                if (m_simplifiedEffect.contains("[ Pendulum Effect ]")) {
+                    m_simplifiedEffect.remove("[ Pendulum Effect ]");
+                    static const QRegularExpression re_flavorText(R"(-{40}.*$)", QRegularExpression::DotMatchesEverythingOption);
+                    m_simplifiedEffect.remove(re_flavorText);
+                } else {
+                    m_simplifiedEffect.clear();
+                }
+            } else {
+                m_simplifiedEffect.remove("[ Pendulum Effect ]");
+                m_simplifiedEffect.remove(QString('-').repeated(40));
+                m_simplifiedEffect.remove("[ Monster Effect ]");
+            }
+        }
+
         // Newlines aren't considered for the character count, so we remove them.
         static const QRegularExpression re_newLines(R"([\r\n])");
         m_simplifiedEffect.remove(re_newLines);
