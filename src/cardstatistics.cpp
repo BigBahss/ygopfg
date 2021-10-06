@@ -48,6 +48,10 @@ namespace ygo {
         static const QRegularExpression re_monsterCardType(R"( \((Ritual|Fusion|Synchro|Xyz|Pendulum|Link)(,?( and| or)? (Ritual|Fusion|Synchro|Xyz|Pendulum|Link))+\))");
         m_simplifiedEffect.remove(re_monsterCardType);
 
+        // Remove "(but [its/their] effects can still be activated)".
+        static const QRegularExpression re_stillBeActivated(R"( \(but (its|their) effects can still be activated\))");
+        m_simplifiedEffect.remove(re_stillBeActivated);
+
         // Newlines aren't considered for the character count, so we remove them.
         static const QRegularExpression re_newLines(R"([\r\n])");
         m_simplifiedEffect.remove(re_newLines);
