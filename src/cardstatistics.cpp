@@ -37,8 +37,12 @@ namespace ygo {
         }
 
         // Remove statlines of tokens and trap monsters.
-        static const QRegularExpression re_statline(R"( \([^\)]+\/[^\)]+\/Level \d{1,2}\/ATK \d+\/DEF \d+\))");
+        static const QRegularExpression re_statline(R"( \([^\)]+/[^\)]+/Level \d{1,2}/ATK \d+/DEF \d+\))");
         m_simplifiedEffect.remove(re_statline);
+
+        // Remove type of card "(Monster, Spell, or Trap)".
+        static const QRegularExpression re_cardType(R"( \(Monster, Spell,( (and/)?or)? Trap\))");
+        m_simplifiedEffect.remove(re_cardType);
 
         // Newlines aren't considered for the character count, so we remove them.
         static const QRegularExpression re_newLines(R"([\r\n])");
