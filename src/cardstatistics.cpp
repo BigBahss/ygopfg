@@ -1,5 +1,6 @@
 #include "cardstatistics.h"
 #include <QRegularExpression>
+#include <iostream>
 
 
 namespace ygo {
@@ -60,6 +61,7 @@ namespace ygo {
         static const QRegularExpression re_butCanSet(R"( \(but( you)? can( Normal)? Set\))");
         m_simplifiedEffect.remove(re_butCanSet);
 
+        // Remove boiler-plate from the effects of pendulums.
         if (m_cardType & ygo::Pendulum) {
             if (m_cardType & ygo::Normal) {
                 if (m_simplifiedEffect.contains("[ Pendulum Effect ]")) {
@@ -76,12 +78,13 @@ namespace ygo {
             }
         }
 
+        // Normalize whitespace
         static const QRegularExpression re_repeatedWhitespace(R"( {2,})");
         m_simplifiedEffect.replace(re_repeatedWhitespace, " ");
         m_simplifiedEffect = m_simplifiedEffect.trimmed();
 
         // Count words and characters
-        static const QRegularExpression re_word(R"(\b\w+\b)");
+        static const QRegularExpression re_word(R"(\b\w+\b(-\w+\b)*)");
         auto it = re_word.globalMatch(m_simplifiedEffect);
         if (!it.isValid()) {
             return;
