@@ -2,6 +2,9 @@
 #include <sqlite3.h>
 #include <QMap>
 #include <QtMath>
+#include <cmath>
+#include <QFile>
+#include <QTextStream>
 
 #include "cardinfo.h"
 #include "cardstatistics.h"
@@ -29,6 +32,7 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
+    // Map card ids by card name to handle alt arts
     QMultiMap<QString, int> idsByName;
     for (const auto &card : cardsById) {
         idsByName.insert(card.name(), card.id());
@@ -36,7 +40,6 @@ int main(int argc, char *argv[]) {
 
     QMap<QString, ygo::CardInfo> effectCardsByName;
     QMap<QString, ygo::CardInfo> nonEffectCardsByName;
-
     for (const auto &card : cardsById) {
         if (card.hasEffect()) {
             effectCardsByName.insert(card.name(), ygo::CardInfo(card));
@@ -84,6 +87,30 @@ int main(int argc, char *argv[]) {
     std::cout << "Standard deviation of char count: " << charStdDev << '\n';
     std::cout << "      25th percentile word count: " << word25th << '\n';
     std::cout << "      25th percentile char count: " << char25th << '\n';
+
+    int word25thRounded = round(word25th);
+    int char25thRounded = round(char25th);
+
+    QMap<QString, ygo::CardInfo> cardsInPercentile(nonEffectCardsByName);
+    for (const auto &card : effectCardStats) {
+        if (card.wordCount() <= word25thRounded && card.charCount() <= char25thRounded) {
+            cardsInPercentile.insert(card.name(), effectCardsByName[card.name()]);
+        }
+    }
+
+    QFile conf("25th-output.conf");
+    conf.open(QIODevice::WriteOnly | QIODevice::Truncate);
+    QTextStream fileStream(&conf);
+    fileStream << "#[2021.9 25th]\n!2021.9 25th\n$whitelist\n\n";
+    for (const auto &card : cardsInPercentile) {
+        auto id = QString::number(card.id());
+        const int padding = 8 - id.length();
+        id = QString('0').repeated(padding) + id;
+        fileStream << id << " 3 --" << card.name() << '\n';
+    }
+    fileStream << Qt::flush;
+
+    return 0;
 }
 
 inline QStringList getArguments(int argc, char *argv[]) {
