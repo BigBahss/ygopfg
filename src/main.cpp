@@ -145,7 +145,7 @@ inline QMap<int, ygo::CardInfo> readCardInfoFromDatabase(const QString &file) {
     QMap<int, ygo::CardInfo> cards;
 
     char *errMsg = nullptr;
-    sqlite3_exec(db, "select id,type from datas", (execCallback)selectFromDatasTable, &cards, &errMsg);
+    sqlite3_exec(db, "select id,ot,type from datas", (execCallback)selectFromDatasTable, &cards, &errMsg);
 
     if (rc != SQLITE_OK) {
         std::cerr << "SQL error: " << errMsg << '\n';
@@ -173,6 +173,7 @@ inline QMap<int, ygo::CardInfo> readCardInfoFromDatabase(const QString &file) {
 inline int selectFromDatasTable(QMap<int, ygo::CardInfo> *cards, int argc, char **argv, char **azColName) {
     ygo::CardInfo card;
     bool idConvertedSuccessfully = false;
+    bool otConvertedSuccessfully = false;
     bool cardTypeConvertedSuccessfully = false;
 
     for (int i = 0; i < argc; ++i) {
@@ -183,6 +184,12 @@ inline int selectFromDatasTable(QMap<int, ygo::CardInfo> *cards, int argc, char 
             card.setId(value.toInt(&idConvertedSuccessfully));
 
             if (!idConvertedSuccessfully) {
+                return 1;
+            }
+        } else if (colName == "ot") {
+            card.setOt(static_cast<ygo::CardType>(value.toInt(&otConvertedSuccessfully)));
+
+            if (!otConvertedSuccessfully) {
                 return 1;
             }
         } else if (colName == "type") {
@@ -196,6 +203,7 @@ inline int selectFromDatasTable(QMap<int, ygo::CardInfo> *cards, int argc, char 
 
     if (cards->contains(card.id())) {
         (*cards)[card.id()].setCardType(card.cardType());
+        (*cards)[card.id()].setOt(card.ot());
     } else {
         cards->insert(card.id(), card);
     }
