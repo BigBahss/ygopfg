@@ -5,15 +5,16 @@
 #include <cmath>
 #include <QFile>
 #include <QTextStream>
+#include <QDir>
+#include <QRegularExpression>
 
+#include "commandline.h"
 #include "cardinfo.h"
 #include "cardstatistics.h"
 
 
-static QStringList getArguments(int argc, char *argv[]);
-static QString getDatabaseFileFromArguments(const QStringList &args);
+static QStringList getCardDatabaseFiles(const QString &dbPath);
 static QMap<int, ygo::CardInfo> readCardInfoFromDatabase(const QString &file);
-
 static int selectFromDatasTable(QMap<int, ygo::CardInfo> *data, int argc, char **argv, char **azColName);
 static int selectFromTextsTable(QMap<int, ygo::CardInfo> *data, int argc, char **argv, char **azColName);
 
@@ -21,15 +22,27 @@ typedef int (*execCallback)(void*, int, char**, char**);
 
 
 int main(int argc, char *argv[]) {
-    QStringList args = getArguments(argc, argv);
-    QString file = getDatabaseFileFromArguments(args);
-    if (file.isEmpty()) {
+    const QStringList args = getArguments(argc, argv);
+    const CommandFlags flags = parseCommandFlags(args);
+    if (flags.helpNeeded) {
+        printHelp();
         return 1;
     }
 
-    QMap<int, ygo::CardInfo> cardsById = readCardInfoFromDatabase(file);
-    if (cardsById.isEmpty()) {
-        return 1;
+    const QStringList dbFiles = getCardDatabaseFiles(flags.dbPath);
+
+    // Consolidate the entire legal cardpool from the databases and map them by id
+    QMap<int, ygo::CardInfo> allCardsById;
+    for (const auto &dbFile : dbFiles) {
+        allCardsById.insert(readCardInfoFromDatabase(dbFile));
+    }
+
+    // Remove tokens and pre-errata cards from the cardpool
+    QMap<int, ygo::CardInfo> cardsById;
+    for (const auto &card : allCardsById) {
+        if (!(card.cardType() & ygo::Token || card.ot() == 8)) {
+            cardsById.insert(card.id(), card);
+        }
     }
 
     // Map card ids by card name to handle alt arts
@@ -38,6 +51,7 @@ int main(int argc, char *argv[]) {
         idsByName.insert(card.name(), card.id());
     }
 
+    // Split effect cards and non-effect cards into separate maps
     QMap<QString, ygo::CardInfo> effectCardsByName;
     QMap<QString, ygo::CardInfo> nonEffectCardsByName;
     for (const auto &card : cardsById) {
@@ -48,6 +62,7 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    // Calculate statistics for effect cards and map them by card name
     QMap<QString, ygo::CardStatistics> effectCardStats;
     for (const auto &card : effectCardsByName) {
         effectCardStats.insert(card.name(), ygo::CardStatistics(card));
@@ -91,6 +106,7 @@ int main(int argc, char *argv[]) {
     int word25thRounded = round(word25th);
     int char25thRounded = round(char25th);
 
+    // Collect the cards that exist in the percentile
     QMap<QString, ygo::CardInfo> cardsInPercentile(nonEffectCardsByName);
     for (const auto &card : effectCardStats) {
         if (card.wordCount() <= word25thRounded && card.charCount() <= char25thRounded) {
@@ -98,7 +114,8 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    QFile conf("25th-output.conf");
+    // Create the config file
+    QFile conf(flags.outputLFList);
     conf.open(QIODevice::WriteOnly | QIODevice::Truncate);
     QTextStream fileStream(&conf);
     fileStream << "#[2021.9 25th]\n!2021.9 25th\n$whitelist\n\n";
@@ -113,21 +130,26 @@ int main(int argc, char *argv[]) {
     return 0;
 }
 
-inline QStringList getArguments(int argc, char *argv[]) {
-    QStringList args;
-    for (int i = 0; i < argc; ++i) {
-        args.append(argv[i]);
-    }
-    return args;
-}
+inline QStringList getCardDatabaseFiles(const QString &dbPath) {
+    const QDir directory(dbPath);
 
-inline QString getDatabaseFileFromArguments(const QStringList &args) {
-    if (args.count() > 1) {
-        return args.last();
-    } else {
-        std::cout << "Please specify a card database file\n";
-        return QString();
+    QStringList dbFiles;
+
+    if (!directory.exists()) {
+        return dbFiles;
     }
+
+    static const QRegularExpression re_cardDatabase(R"((^(cards.cdb|cards.delta.cdb)|\brelease\b.*\.cdb)$)");
+
+    const auto files = directory.entryInfoList({ "*.cdb" }, QDir::Files, QDir::Size);
+
+    for (const auto &file : files) {
+        if (file.fileName().contains(re_cardDatabase)) {
+            dbFiles.append(file.filePath());
+        }
+    }
+
+    return dbFiles;
 }
 
 inline QMap<int, ygo::CardInfo> readCardInfoFromDatabase(const QString &file) {
