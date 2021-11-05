@@ -1,0 +1,14 @@
+Makefile
+*.o
+ygopfg
+ygopfg.exe
+porymap.app*
+
+# Qt generated files
+ui_*.h
+moc_*.h
+moc_*.cpp
+qrc_*.cpp
+
+build/
+.vscode/
