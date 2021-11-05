@@ -58,6 +58,9 @@ namespace ygo {
         int id() const { return m_id; }
         void setId(int id);
 
+        int ot() const { return m_ot; }
+        void setOt(int ot);
+
         CardType cardType() const { return m_cardType; }
         void setCardType(CardType cardType);
 
@@ -74,6 +77,7 @@ namespace ygo {
         QString m_description;
         CardType m_cardType;
         int m_id;
+        int m_ot;
     };
 
 } // namespace ygo

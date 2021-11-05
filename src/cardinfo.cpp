@@ -5,13 +5,18 @@ namespace ygo {
 
     CardInfo::CardInfo()
         : m_cardType(NullType),
-          m_id(0)
+          m_id(0),
+          m_ot(0)
     {
 
     }
 
     void CardInfo::setName(const QString &name) {
         m_name = name;
+    }
+
+    void CardInfo::setOt(int ot) {
+        m_ot = ot;
     }
 
     void CardInfo::setCardType(CardType cardType) {
