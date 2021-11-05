@@ -7,6 +7,7 @@
 #include <QTextStream>
 #include <QDir>
 #include <QRegularExpression>
+#include <algorithm>
 
 #include "commandline.h"
 #include "cardinfo.h"
@@ -68,51 +69,37 @@ int main(int argc, char *argv[]) {
         effectCardStats.insert(card.name(), ygo::CardStatistics(card));
     }
 
-    int effectCardTotal = effectCardsByName.count();
-
-    // Calculate the means
-    double wordTotal = 0;
-    double charTotal = 0;
+    // Collect word and character counts and sort them
+    std::vector<int> wordCounts;
+    std::vector<int> charCounts;
     for (const auto &effectCard : effectCardStats) {
-        wordTotal += effectCard.wordCount();
-        charTotal += effectCard.charCount();
+        wordCounts.push_back(effectCard.wordCount());
+        charCounts.push_back(effectCard.charCount());
     }
-    double wordMean = wordTotal / effectCardTotal;
-    double charMean = charTotal / effectCardTotal;
+    std::sort(wordCounts.begin(), wordCounts.end());
+    std::sort(charCounts.begin(), charCounts.end());
 
-    // Calculate the standard deviations
-    double wordSqrDistTotal = 0;
-    double charSqrDistTotal = 0;
-    for (const auto &effectCard : effectCardStats) {
-        wordSqrDistTotal += qPow(effectCard.wordCount() - wordMean, 2);
-        charSqrDistTotal += qPow(effectCard.charCount() - charMean, 2);
-    }
-    double wordStdDev = qSqrt(wordSqrDistTotal / effectCardTotal);
-    double charStdDev = qSqrt(charSqrDistTotal / effectCardTotal);
-
-    // Calculate 25th percentiles
-    double word25th = wordMean + (-0.675) * wordStdDev;
-    double char25th = charMean + (-0.675) * charStdDev;
-
-    std::cout << '\n';
-    std::cout << "              Total effect cards: " << effectCardTotal << '\n';
-    std::cout << "                 Mean word count: " << wordMean << '\n';
-    std::cout << "                 Mean char count: " << charMean << '\n';
-    std::cout << "Standard deviation of word count: " << wordStdDev << '\n';
-    std::cout << "Standard deviation of char count: " << charStdDev << '\n';
-    std::cout << "      25th percentile word count: " << word25th << '\n';
-    std::cout << "      25th percentile char count: " << char25th << '\n';
-
-    int word25thRounded = round(word25th);
-    int char25thRounded = round(char25th);
+    // Find the 25th percentile for both the word and character counts
+    int percentileIndex = round(effectCardsByName.count() * 0.25);
+    int word25th = wordCounts.at(percentileIndex);
+    int char25th = charCounts.at(percentileIndex);
 
     // Collect the cards that exist in the percentile
-    QMap<QString, ygo::CardInfo> cardsInPercentile(nonEffectCardsByName);
+    QMap<QString, ygo::CardInfo> cardsInPercentile;
     for (const auto &card : effectCardStats) {
-        if (card.wordCount() <= word25thRounded && card.charCount() <= char25thRounded) {
+        if (card.wordCount() <= word25th && card.charCount() <= char25th) {
             cardsInPercentile.insert(card.name(), effectCardsByName[card.name()]);
         }
     }
+    int percentileEffectCards = cardsInPercentile.count();
+    cardsInPercentile.insert(nonEffectCardsByName);
+
+    std::cout << '\n';
+    std::cout << "     Percentile word count: " << word25th << '\n';
+    std::cout << "     Percentile char count: " << char25th << '\n';
+    std::cout << "        Total effect cards: " << effectCardsByName.count() << '\n';
+    std::cout << "Effect cards in percentile: " << percentileEffectCards << '\n';
+    std::cout << " Total cards in percentile: " << cardsInPercentile.count() << '\n';
 
     // Create the config file
     QFile conf(flags.outputLFList);
