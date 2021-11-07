@@ -10,6 +10,7 @@ struct CommandFlags {
     QString outputLFList;
     QString prevLFList;
     QString currentFormatLFList;
+    double percentile;
     bool helpNeeded = false;
 };
 
