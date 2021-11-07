@@ -8,6 +8,7 @@
 #include <QDir>
 #include <QRegularExpression>
 #include <algorithm>
+#include <QDate>
 
 #include "commandline.h"
 #include "parseutil.h"
@@ -22,6 +23,7 @@ static int selectFromTextsTable(QMap<int, ygo::CardInfo> *data, int argc, char *
 static int getCardLimitation(const QList<int> &ids,
                              const QMap<int, int> &prevLimits,
                              const QMap<int, int> &currentFormatLimits);
+static QString getFormatName(double percentile);
 
 typedef int (*execCallback)(void*, int, char**, char**);
 
@@ -88,24 +90,24 @@ int main(int argc, char *argv[]) {
     std::sort(wordCounts.begin(), wordCounts.end());
     std::sort(charCounts.begin(), charCounts.end());
 
-    // Find the 25th percentile for both the word and character counts
-    int percentileIndex = round(effectCardsByName.count() * 0.25);
-    int word25th = wordCounts.at(percentileIndex);
-    int char25th = charCounts.at(percentileIndex);
+    // Find the specified percentile for both the word and character counts
+    const int percentileIndex = round(effectCardsByName.count() * (flags.percentile / 100));
+    const int wordPercentile = wordCounts.at(percentileIndex);
+    const int charPercentile = charCounts.at(percentileIndex);
 
     // Collect the cards that exist in the percentile
     QMap<QString, ygo::CardInfo> cardsInPercentile;
     for (const auto &card : effectCardStats) {
-        if (card.wordCount() <= word25th && card.charCount() <= char25th) {
+        if (card.wordCount() <= wordPercentile && card.charCount() <= charPercentile) {
             cardsInPercentile.insert(card.name(), effectCardsByName[card.name()]);
         }
     }
-    int percentileEffectCards = cardsInPercentile.count();
+    const int percentileEffectCards = cardsInPercentile.count();
     cardsInPercentile.insert(nonEffectCardsByName);
 
     std::cout << '\n';
-    std::cout << "     Percentile word count: " << word25th << '\n';
-    std::cout << "     Percentile char count: " << char25th << '\n';
+    std::cout << "     Percentile word count: " << wordPercentile << '\n';
+    std::cout << "     Percentile char count: " << charPercentile << '\n';
     std::cout << "        Total effect cards: " << effectCardsByName.count() << '\n';
     std::cout << "Effect cards in percentile: " << percentileEffectCards << '\n';
     std::cout << " Total cards in percentile: " << cardsInPercentile.count() << '\n';
@@ -119,7 +121,8 @@ int main(int argc, char *argv[]) {
 
     // Write the cardpool to the config file
     QTextStream out(&conf);
-    out << "#[2021.9 25th]\n!2021.9 25th\n$whitelist\n\n";
+    const auto name = getFormatName(flags.percentile);
+    out << "#[" + name + "]\n!" + name + "\n$whitelist\n\n";
     for (const auto &card : cardsInPercentile) {
         auto id = QString::number(card.id());
         const int padding = 8 - id.length();
@@ -131,6 +134,7 @@ int main(int argc, char *argv[]) {
 
     return 0;
 }
+
 
 inline QStringList getCardDatabaseFiles(const QString &dbPath) {
     const QDir directory(dbPath);
@@ -157,7 +161,7 @@ inline QStringList getCardDatabaseFiles(const QString &dbPath) {
 inline QMap<int, ygo::CardInfo> readCardInfoFromDatabase(const QString &file) {
     sqlite3 *db;
 
-    int rc = sqlite3_open(file.toStdString().c_str(), &db);
+    const int rc = sqlite3_open(file.toStdString().c_str(), &db);
 
     if (rc) {
         std::cerr << "Card database could not be opened: " << sqlite3_errmsg(db) << '\n';
@@ -282,4 +286,19 @@ inline int getCardLimitation(const QList<int> &ids,
     }
 
     return 3;
+}
+
+inline QString getFormatName(double percentile) {
+    auto name = QString::number(percentile);
+    if (name.endsWith("1")) {
+        name += "st";
+    } else if (name.endsWith("2")) {
+        name += "nd";
+    } else if (name.endsWith("3")) {
+        name += "rd";
+    } else {
+        name += "th";
+    }
+
+    return QString("%1.%2 %3").arg(QDate::currentDate().year()).arg(QDate::currentDate().month()).arg(name);
 }
