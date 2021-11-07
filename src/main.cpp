@@ -10,6 +10,7 @@
 #include <algorithm>
 
 #include "commandline.h"
+#include "parseutil.h"
 #include "cardinfo.h"
 #include "cardstatistics.h"
 
@@ -18,6 +19,9 @@ static QStringList getCardDatabaseFiles(const QString &dbPath);
 static QMap<int, ygo::CardInfo> readCardInfoFromDatabase(const QString &file);
 static int selectFromDatasTable(QMap<int, ygo::CardInfo> *data, int argc, char **argv, char **azColName);
 static int selectFromTextsTable(QMap<int, ygo::CardInfo> *data, int argc, char **argv, char **azColName);
+static int getCardLimitation(const QList<int> &ids,
+                             const QMap<int, int> &prevLimits,
+                             const QMap<int, int> &currentFormatLimits);
 
 typedef int (*execCallback)(void*, int, char**, char**);
 
@@ -29,6 +33,9 @@ int main(int argc, char *argv[]) {
         printHelp();
         return 1;
     }
+
+    const QMap<int, int> previousCardLimits = parseLFListConf(flags.prevLFList);
+    const QMap<int, int> currentFormatCardLimits = parseLFListConf(flags.currentFormatLFList);
 
     const QStringList dbFiles = getCardDatabaseFiles(flags.dbPath);
 
@@ -72,6 +79,8 @@ int main(int argc, char *argv[]) {
     // Collect word and character counts and sort them
     std::vector<int> wordCounts;
     std::vector<int> charCounts;
+    wordCounts.reserve(effectCardStats.count());
+    charCounts.reserve(effectCardStats.count());
     for (const auto &effectCard : effectCardStats) {
         wordCounts.push_back(effectCard.wordCount());
         charCounts.push_back(effectCard.charCount());
@@ -103,16 +112,22 @@ int main(int argc, char *argv[]) {
 
     // Create the config file
     QFile conf(flags.outputLFList);
-    conf.open(QIODevice::WriteOnly | QIODevice::Truncate);
-    QTextStream fileStream(&conf);
-    fileStream << "#[2021.9 25th]\n!2021.9 25th\n$whitelist\n\n";
+    if (!conf.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        std::cout << "Could not open the specified output file: " << flags.outputLFList.toStdString() << '\n';
+        return 1;
+    }
+
+    // Write the cardpool to the config file
+    QTextStream out(&conf);
+    out << "#[2021.9 25th]\n!2021.9 25th\n$whitelist\n\n";
     for (const auto &card : cardsInPercentile) {
         auto id = QString::number(card.id());
         const int padding = 8 - id.length();
         id = QString('0').repeated(padding) + id;
-        fileStream << id << " 3 --" << card.name() << '\n';
+        const int limit = getCardLimitation(idsByName.values(card.name()), previousCardLimits, currentFormatCardLimits);
+        out << id << ' ' << limit << " --" << card.name() << '\n';
     }
-    fileStream << Qt::flush;
+    out << Qt::flush;
 
     return 0;
 }
@@ -249,4 +264,22 @@ inline int selectFromTextsTable(QMap<int, ygo::CardInfo> *cards, int argc, char 
     }
 
     return 0;
+}
+
+inline int getCardLimitation(const QList<int> &ids,
+                             const QMap<int, int> &prevLimits,
+                             const QMap<int, int> &currentFormatLimits) {
+    for (int id : ids) {
+        if (prevLimits.contains(id)) {
+            return prevLimits.value(id);
+        }
+    }
+
+    for (int id : ids) {
+        if (currentFormatLimits.contains(id)) {
+            return currentFormatLimits.value(id);
+        }
+    }
+
+    return 3;
 }
