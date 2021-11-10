@@ -16,10 +16,13 @@
 #include "cardstatistics.h"
 
 
-static QStringList getCardDatabaseFiles(const QString &dbPath);
+static QStringList getIncludedDatabaseFiles(const QFileInfoList &dbFiles);
+static QStringList getExcludedDatabaseFiles(const QFileInfoList &dbFiles);
 static QMap<int, ygo::CardInfo> readCardInfoFromDatabase(const QString &file);
 static int selectFromDatasTable(QMap<int, ygo::CardInfo> *data, int argc, char **argv, char **azColName);
 static int selectFromTextsTable(QMap<int, ygo::CardInfo> *data, int argc, char **argv, char **azColName);
+static QMultiMap<int, int> readExcludedCardIds(const QString &file);
+static int selectFromExcludedDatasTable(QMultiMap<int, int> *idsByAlias, int argc, char **argv, char **azColName);
 static int getCardLimitation(const QList<int> &ids,
                              const QMap<int, int> &prevLimits,
                              const QMap<int, int> &currentFormatLimits);
@@ -39,12 +42,30 @@ int main(int argc, char *argv[]) {
     const QMap<int, int> previousCardLimits = parseLFListConf(flags.prevLFList);
     const QMap<int, int> currentFormatCardLimits = parseLFListConf(flags.currentFormatLFList);
 
-    const QStringList dbFiles = getCardDatabaseFiles(flags.dbPath);
+    const QFileInfoList dbFiles = QDir(flags.dbPath).entryInfoList({ "*.cdb" }, QDir::Files);
+    const QStringList dbIncludedFiles = getIncludedDatabaseFiles(dbFiles);
+    const QStringList dbExcludedFiles = getExcludedDatabaseFiles(dbFiles);
 
     // Consolidate the entire legal cardpool from the databases and map them by id
     QMap<int, ygo::CardInfo> allCardsById;
-    for (const auto &dbFile : dbFiles) {
+    for (const auto &dbFile : dbIncludedFiles) {
         allCardsById.insert(readCardInfoFromDatabase(dbFile));
+    }
+
+    // Collect all card ids that may need to be excluded from the cardpool (rush cards, anime cards, etc.)
+    QMultiMap<int, int> excludedIdsByAlias;
+    for (const auto &dbFile : dbExcludedFiles) {
+        const auto idsByAlias = readExcludedCardIds(dbFile);
+        for (const auto alias : idsByAlias.keys()) {
+            for (const auto id : idsByAlias.values(alias)) {
+                excludedIdsByAlias.insert(alias, id);
+            }
+        }
+    }
+    for (const auto &card : allCardsById) {
+        if (card.alias() != 0) {
+            excludedIdsByAlias.insert(card.alias(), card.id());
+        }
     }
 
     // Remove tokens and pre-errata cards from the cardpool
@@ -123,63 +144,76 @@ int main(int argc, char *argv[]) {
     QTextStream out(&conf);
     const auto name = getFormatName(flags.percentile);
     out << "#[" + name + "]\n!" + name + "\n$whitelist\n\n";
+
+    QList<int> excludedIds;
     for (const auto &card : cardsInPercentile) {
         auto id = QString::number(card.id());
         const int padding = 8 - id.length();
         id = QString('0').repeated(padding) + id;
         const int limit = getCardLimitation(idsByName.values(card.name()), previousCardLimits, currentFormatCardLimits);
         out << id << ' ' << limit << " --" << card.name() << '\n';
+
+        if (excludedIdsByAlias.contains(card.id())) {
+            excludedIds.append(excludedIdsByAlias.values(card.id()));
+        }
     }
+
+    out << '\n';
+
+    for (const auto id : excludedIds) {
+        out << id << " -1\n";
+    }
+
     out << Qt::flush;
 
     return 0;
 }
 
 
-inline QStringList getCardDatabaseFiles(const QString &dbPath) {
-    const QDir directory(dbPath);
+static const QRegularExpression re_included(R"((^(cards.cdb|cards.delta.cdb)|.*\brelease\b.*\.cdb)$)");
 
-    QStringList dbFiles;
+inline QStringList getIncludedDatabaseFiles(const QFileInfoList &dbFiles) {
+    QStringList dbIncludedFiles;
 
-    if (!directory.exists()) {
-        return dbFiles;
-    }
-
-    static const QRegularExpression re_cardDatabase(R"((^(cards.cdb|cards.delta.cdb)|\brelease\b.*\.cdb)$)");
-
-    const auto files = directory.entryInfoList({ "*.cdb" }, QDir::Files, QDir::Size);
-
-    for (const auto &file : files) {
-        if (file.fileName().contains(re_cardDatabase)) {
-            dbFiles.append(file.filePath());
+    for (const auto &file : dbFiles) {
+        if (file.fileName().contains(re_included)) {
+            dbIncludedFiles.append(file.filePath());
         }
     }
 
-    return dbFiles;
+    return dbIncludedFiles;
+}
+
+inline QStringList getExcludedDatabaseFiles(const QFileInfoList &dbFiles) {
+    QStringList dbExcludedFiles;
+
+    for (const auto &file : dbFiles) {
+        if (!file.fileName().contains(re_included)) {
+            dbExcludedFiles.append(file.filePath());
+        }
+    }
+
+    return dbExcludedFiles;
 }
 
 inline QMap<int, ygo::CardInfo> readCardInfoFromDatabase(const QString &file) {
-    sqlite3 *db;
+    sqlite3 *db = nullptr;
 
     const int rc = sqlite3_open(file.toStdString().c_str(), &db);
 
     if (rc) {
         std::cerr << "Card database could not be opened: " << sqlite3_errmsg(db) << '\n';
         return {};
-    } else {
-        std::cout << "Card database opened successfully\n";
     }
 
     QMap<int, ygo::CardInfo> cards;
 
     char *errMsg = nullptr;
-    sqlite3_exec(db, "select id,ot,type from datas", (execCallback)selectFromDatasTable, &cards, &errMsg);
+    sqlite3_exec(db, "select id,ot,alias,type from datas", (execCallback)selectFromDatasTable, &cards, &errMsg);
 
     if (rc != SQLITE_OK) {
         std::cerr << "SQL error: " << errMsg << '\n';
         sqlite3_free(errMsg);
-    } else {
-        std::cout << "Read id and type from datas table successfully\n";
     }
 
     errMsg = nullptr;
@@ -188,50 +222,55 @@ inline QMap<int, ygo::CardInfo> readCardInfoFromDatabase(const QString &file) {
     if (rc != SQLITE_OK) {
         std::cerr << "SQL error: " << errMsg << '\n';
         sqlite3_free(errMsg);
-    } else {
-        std::cout << "Read id, name, and desc from texts table successfully\n";
     }
 
     sqlite3_close(db);
-    std::cout << "Closed card database\n";
 
     return cards;
 }
 
 inline int selectFromDatasTable(QMap<int, ygo::CardInfo> *cards, int argc, char **argv, char **azColName) {
     ygo::CardInfo card;
-    bool idConvertedSuccessfully = false;
-    bool otConvertedSuccessfully = false;
-    bool cardTypeConvertedSuccessfully = false;
 
     for (int i = 0; i < argc; ++i) {
         QString colName(azColName[i]);
         QString value(argv[i] ? argv[i] : "NULL");
 
         if (colName == "id") {
-            card.setId(value.toInt(&idConvertedSuccessfully));
+            bool convertedSuccessfully = false;
+            card.setId(value.toInt(&convertedSuccessfully));
 
-            if (!idConvertedSuccessfully) {
+            if (!convertedSuccessfully) {
                 return 1;
             }
         } else if (colName == "ot") {
-            card.setOt(static_cast<ygo::CardType>(value.toInt(&otConvertedSuccessfully)));
+            bool convertedSuccessfully = false;
+            card.setOt(value.toInt(&convertedSuccessfully));
 
-            if (!otConvertedSuccessfully) {
+            if (!convertedSuccessfully) {
+                return 1;
+            }
+        } else if (colName == "alias") {
+            bool convertedSuccessfully = false;
+            card.setAlias(value.toInt(&convertedSuccessfully));
+
+            if (!convertedSuccessfully) {
                 return 1;
             }
         } else if (colName == "type") {
-            card.setCardType(static_cast<ygo::CardType>(value.toInt(&cardTypeConvertedSuccessfully)));
+            bool convertedSuccessfully = false;
+            card.setCardType(static_cast<ygo::CardType>(value.toInt(&convertedSuccessfully)));
 
-            if (!cardTypeConvertedSuccessfully) {
+            if (!convertedSuccessfully) {
                 return 1;
             }
         }
     }
 
     if (cards->contains(card.id())) {
-        (*cards)[card.id()].setCardType(card.cardType());
         (*cards)[card.id()].setOt(card.ot());
+        (*cards)[card.id()].setAlias(card.alias());
+        (*cards)[card.id()].setCardType(card.cardType());
     } else {
         cards->insert(card.id(), card);
     }
@@ -241,16 +280,16 @@ inline int selectFromDatasTable(QMap<int, ygo::CardInfo> *cards, int argc, char 
 
 inline int selectFromTextsTable(QMap<int, ygo::CardInfo> *cards, int argc, char **argv, char **azColName) {
     ygo::CardInfo card;
-    bool idConvertedSuccessfully = false;
 
     for (int i = 0; i < argc; ++i) {
         QString colName(azColName[i]);
         QString value(argv[i] ? argv[i] : "NULL");
 
         if (colName == "id") {
-            card.setId(value.toInt(&idConvertedSuccessfully));
+            bool convertedSuccessfully = false;
+            card.setId(value.toInt(&convertedSuccessfully));
 
-            if (!idConvertedSuccessfully) {
+            if (!convertedSuccessfully) {
                 return 1;
             }
         } else if (colName == "name") {
@@ -265,6 +304,63 @@ inline int selectFromTextsTable(QMap<int, ygo::CardInfo> *cards, int argc, char 
         (*cards)[card.id()].setDescription(card.description());
     } else {
         cards->insert(card.id(), card);
+    }
+
+    return 0;
+}
+
+inline QMultiMap<int, int> readExcludedCardIds(const QString &file) {
+    sqlite3 *db = nullptr;
+
+    const int rc = sqlite3_open(file.toStdString().c_str(), &db);
+
+    if (rc) {
+        std::cerr << "Card database could not be opened: " << sqlite3_errmsg(db) << '\n';
+        return {};
+    }
+
+    QMultiMap<int, int> idsByAlias;
+
+    char *errMsg = nullptr;
+    sqlite3_exec(db, "select id,alias from datas", (execCallback)selectFromExcludedDatasTable, &idsByAlias, &errMsg);
+
+    if (rc != SQLITE_OK) {
+        std::cerr << "SQL error: " << errMsg << '\n';
+        sqlite3_free(errMsg);
+    }
+
+    sqlite3_close(db);
+
+    return idsByAlias;
+}
+
+inline int selectFromExcludedDatasTable(QMultiMap<int, int> *idsByAlias, int argc, char **argv, char **azColName) {
+    int id = 0;
+    int alias = 0;
+
+    for (int i = 0; i < argc; ++i) {
+        QString colName(azColName[i]);
+        QString value(argv[i] ? argv[i] : "NULL");
+
+        if (colName == "id") {
+            bool convertedSuccessfully = false;
+            id = value.toInt(&convertedSuccessfully);
+
+            if (!convertedSuccessfully) {
+                return 1;
+            }
+        } else if (colName == "alias") {
+            bool convertedSuccessfully = false;
+            alias = value.toInt(&convertedSuccessfully);
+
+            if (!convertedSuccessfully) {
+                return 1;
+            }
+        }
+    }
+
+    if (alias != 0) {
+        idsByAlias->insert(alias, id);
     }
 
     return 0;
