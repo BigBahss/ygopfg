@@ -62,11 +62,6 @@ int main(int argc, char *argv[]) {
             }
         }
     }
-    for (const auto &card : allCardsById) {
-        if (card.alias() != 0) {
-            excludedIdsByAlias.insert(card.alias(), card.id());
-        }
-    }
 
     // Remove tokens and pre-errata cards from the cardpool
     QMap<int, ygo::CardInfo> cardsById;
@@ -86,10 +81,12 @@ int main(int argc, char *argv[]) {
     QMap<QString, ygo::CardInfo> effectCardsByName;
     QMap<QString, ygo::CardInfo> nonEffectCardsByName;
     for (const auto &card : cardsById) {
-        if (card.hasEffect()) {
-            effectCardsByName.insert(card.name(), ygo::CardInfo(card));
-        } else {
-            nonEffectCardsByName.insert(card.name(), ygo::CardInfo(card));
+        if (card.alias() == 0) {
+            if (card.hasEffect()) {
+                effectCardsByName.insert(card.name(), ygo::CardInfo(card));
+            } else {
+                nonEffectCardsByName.insert(card.name(), ygo::CardInfo(card));
+            }
         }
     }
 
