@@ -11,24 +11,28 @@ namespace ygo {
 
     }
 
-    void CardInfo::setName(const QString &name) {
-        m_name = name;
+    void CardInfo::setId(int id) {
+        m_id = id;
     }
 
     void CardInfo::setOt(int ot) {
         m_ot = ot;
     }
 
+    void CardInfo::setAlias(int alias) {
+        m_alias = alias;
+    }
+
     void CardInfo::setCardType(CardType cardType) {
         m_cardType = cardType;
     }
 
-    void CardInfo::setDescription(const QString &description) {
-        m_description = description;
+    void CardInfo::setName(const QString &name) {
+        m_name = name;
     }
 
-    void CardInfo::setId(int id) {
-        m_id = id;
+    void CardInfo::setDescription(const QString &description) {
+        m_description = description;
     }
 
     bool CardInfo::hasEffect() const {

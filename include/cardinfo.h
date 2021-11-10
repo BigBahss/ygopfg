@@ -61,6 +61,9 @@ namespace ygo {
         int ot() const { return m_ot; }
         void setOt(int ot);
 
+        int alias() const { return m_alias; }
+        void setAlias(int alias);
+
         CardType cardType() const { return m_cardType; }
         void setCardType(CardType cardType);
 
@@ -78,6 +81,7 @@ namespace ygo {
         CardType m_cardType;
         int m_id;
         int m_ot;
+        int m_alias;
     };
 
 } // namespace ygo
