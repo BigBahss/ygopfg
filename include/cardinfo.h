@@ -50,8 +50,8 @@ namespace ygo {
     class CardInfo {
     public:
         explicit CardInfo();
-        explicit CardInfo(const CardInfo &other) = default;
-        explicit CardInfo(CardInfo &&other) = default;
+        CardInfo(const CardInfo &other) = default;
+        CardInfo(CardInfo &&other) = default;
         CardInfo &operator=(const CardInfo &other) = default;
         CardInfo &operator=(CardInfo &&other) = default;
 

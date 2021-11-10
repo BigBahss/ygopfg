@@ -9,9 +9,8 @@ namespace ygo {
     class CardStatistics {
     public:
         explicit CardStatistics(const CardInfo &card);
-
-        explicit CardStatistics(const CardStatistics &other) = default;
-        explicit CardStatistics(CardStatistics &&other) = default;
+        CardStatistics(const CardStatistics &other) = default;
+        CardStatistics(CardStatistics &&other) = default;
         CardStatistics &operator=(const CardStatistics &other) = default;
         CardStatistics &operator=(CardStatistics &&other) = default;
 
