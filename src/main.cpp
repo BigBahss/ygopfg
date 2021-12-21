@@ -6,6 +6,7 @@
 #include <QTextStream>
 #include <QDate>
 #include <QtMath>
+#include <QRegularExpression>
 
 #include "commandline.h"
 #include "database.h"
@@ -14,6 +15,7 @@
 #include "cardstatistics.h"
 
 
+QList<int> getExcludedIdsFromLFList(const QString &path);
 static int getCardLimitation(const QList<int> &ids,
                              const QMap<int, int> &prevLimits,
                              const QMap<int, int> &currentFormatLimits);
@@ -112,7 +114,6 @@ int main(int argc, char *argv[]) {
     const int percentileEffectCards = cardsInPercentile.count();
     cardsInPercentile.insert(nonEffectCardsByName);
 
-    std::cout << '\n';
     std::cout << "     Percentile word count: " << wordPercentile << '\n';
     std::cout << "     Percentile char count: " << charPercentile << '\n';
     std::cout << "        Total effect cards: " << effectCardsByName.count() << '\n';
@@ -131,23 +132,107 @@ int main(int argc, char *argv[]) {
     const auto name = getFormatName(flags.percentile);
     out << "#[" + name + "]\n!" + name + "\n$whitelist\n\n";
 
-    QList<int> excludedIds;
-    for (const auto &card : cardsInPercentile) {
+    // Lambda function that returns the config line for a given card (Ex: 67284107 1 --Scapeghost)
+    const auto createConfigLine = [&](const ygo::CardInfo &card) {
         auto id = QString::number(card.id());
         const int padding = 8 - id.length();
         id = QString('0').repeated(padding) + id;
         const int limit = getCardLimitation(idsByName.values(card.name()), previousCardLimits, currentFormatCardLimits);
-        out << id << ' ' << limit << " --" << card.name() << '\n';
+        return QString(id + ' '+ "%1" + " --" + card.name()).arg(limit);
+    };
+
+    // Collect all ids of excluded versions of cards (rush cards, anime cards, etc.)
+    QList<int> excludedIds;
+    for (const auto &card : cardsInPercentile) {
+        out << createConfigLine(card) << '\n';
 
         if (excludedIdsByAlias.contains(card.id())) {
             excludedIds.append(excludedIdsByAlias.values(card.id()));
         }
     }
 
-    out << '\n';
-
+    // Write the excluded ids to the config file
+    if (excludedIds.count()) {
+        out << '\n';
+    }
     for (const auto id : excludedIds) {
         out << id << " -1\n";
+    }
+
+    // Return early if no previous lflist was given
+    if (flags.prevLFList.isEmpty()) {
+        out << Qt::flush;
+        return 0;
+    }
+
+    QList<int> notIncludedInPrevious;
+    QList<int> notIncludedInNew;
+    for (const auto &card : cardsInPercentile) {
+        if (!previousCardLimits.keys().contains(card.id())) {
+            notIncludedInPrevious.append(card.id());
+        }
+    }
+    for (const auto id : previousCardLimits.keys()) {
+        bool found = false;
+        for (const auto &card : cardsInPercentile) {
+            if (card.id() == id) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            notIncludedInNew.append(id);
+        }
+    }
+
+    int newCardCount = notIncludedInPrevious.count();
+    int removedCardCount = notIncludedInNew.count();
+    if (newCardCount == 0 && removedCardCount == 0) {
+        return 0;
+    }
+
+    std::cout << '\n';
+    std::cout << "    Amount of cards added to cardpool: " << newCardCount << '\n';
+    std::cout << "Amount of cards removed from cardpool: " << removedCardCount << '\n';
+
+    const auto previousExcludedIds = getExcludedIdsFromLFList(flags.prevLFList);
+
+    QList<int> notExcludedInPrevious;
+    QList<int> notExcludedInNew;
+    for (const auto id : excludedIds) {
+        if (!previousExcludedIds.contains(id)) {
+            notExcludedInPrevious.append(id);
+        }
+    }
+    for (const auto id : previousExcludedIds) {
+        if (!excludedIds.contains(id)) {
+            notExcludedInNew.append(id);
+        }
+    }
+
+    QMap<QString, ygo::CardInfo> newCards;
+    for (const auto id : notIncludedInPrevious) {
+        if (cardsById.contains(id)) {
+            const auto &card = cardsById[id];
+            newCards.insert(card.name(), card);
+        }
+    }
+    QMap<QString, ygo::CardInfo> removedCards;
+    for (const auto id : notIncludedInNew) {
+        if (cardsById.contains(id)) {
+            const auto &card = cardsById[id];
+            removedCards.insert(card.name(), card);
+        }
+    }
+
+    out << "\n## Cards added\n";
+    for (const auto &card : newCards) {
+        out << "# " << createConfigLine(card) << '\n';
+    }
+
+    out << "\n## Cards removed\n";
+    for (const auto &card : removedCards) {
+        out << "# " << createConfigLine(card) << '\n';
     }
 
     out << Qt::flush;
@@ -155,6 +240,38 @@ int main(int argc, char *argv[]) {
     return 0;
 }
 
+
+QList<int> getExcludedIdsFromLFList(const QString &path) {
+    auto text = readTextFile(path);
+    if (text.isEmpty()) {
+        return {};
+    }
+
+    static const QRegularExpression re_lineComment(R"(^\s*#.*$)", QRegularExpression::MultilineOption);
+    text.remove(re_lineComment);
+
+    static const QRegularExpression re_shebang(R"(^\s*!.*$)", QRegularExpression::MultilineOption);
+    text.remove(re_shebang);
+
+    static const QRegularExpression re_whitelist(R"(^\s*\$whitelist\b.*$)", QRegularExpression::MultilineOption);
+    text.remove(re_whitelist);
+
+    static const QRegularExpression re_blankLines(R"(\n(\s*\n)+)");
+    text.replace(re_blankLines, "\n");
+
+    text = text.trimmed() + '\n';
+
+    QList<int> excludedIds;
+    static const QRegularExpression re_lfEntry(R"(^\s*(?<id>\d+)\s+-1.*$)", QRegularExpression::MultilineOption);
+    auto it = re_lfEntry.globalMatch(text);
+    while (it.hasNext()) {
+        const auto entry = it.next();
+        const int id = entry.captured("id").toInt();
+        excludedIds.push_back(id);
+    }
+
+    return excludedIds;
+}
 
 int getCardLimitation(const QList<int> &ids,
                       const QMap<int, int> &prevLimits,
