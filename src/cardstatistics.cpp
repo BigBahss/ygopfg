@@ -84,7 +84,7 @@ namespace ygo {
         m_simplifiedEffect = m_simplifiedEffect.trimmed();
 
         // Count words and characters
-        static const QRegularExpression re_word(R"(\b\w+\b(-\w+\b)*)");
+        static const QRegularExpression re_word(R"(\b[\w']+\b(-[\w']+\b)*)");
         auto it = re_word.globalMatch(m_simplifiedEffect);
         if (!it.isValid()) {
             return;
